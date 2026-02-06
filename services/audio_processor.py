@@ -1,23 +1,40 @@
-from pydub import AudioSegment
+import subprocess
+from pathlib import Path
 
 
 class AudioProcessor:
     def process(self, input_path, bit_depth, sample_reduction):
-        audio = AudioSegment.from_file(input_path)
+        """
+        bit_depth: 1-16  (عملاً 4-8 بهترین نتیجه arcade می‌دهد)
+        sample_reduction: 1-16
+        """
 
-        # کاهش sample rate
-        new_sample_rate = audio.frame_rate // sample_reduction
-        audio = audio.set_frame_rate(new_sample_rate)
+        input_path = Path(input_path)
+        output_path = input_path.with_name(
+            f"processed_{input_path.stem}.wav"
+        )
 
-        # تنظیم bit depth
-        # bit_depth = 8, 16 → sample_width = bit_depth // 8
-        sample_width = bit_depth // 8
-        if sample_width < 1:
-            sample_width = 1
+        # Base sample rate
+        base_rate = 44100
+        target_rate = max(4000, int(base_rate / sample_reduction))
 
-        audio = audio.set_sample_width(sample_width)
+        # Clamp bit depth to useful arcade range
+        bits = max(4, min(bit_depth, 8))
 
-        output_path = input_path.replace("input", "output")
-        audio.export(output_path, format="wav")
+        af_filter = (
+            f"lowpass=f=3800,"
+            f"aresample={target_rate}:resampler=soxr,"
+            f"acrusher=bits={bits}:mode=log,dither"
+        )
+
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-i", str(input_path),
+            "-af", af_filter,
+            str(output_path)
+        ]
+
+        subprocess.run(cmd, check=True)
 
         return output_path
