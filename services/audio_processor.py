@@ -1,45 +1,23 @@
-import asyncio
-import subprocess
-from pathlib import Path
+from pydub import AudioSegment
 
 
 class AudioProcessor:
-    async def process(self, input_path, bit_depth, sample_reduction):
-        input_path = Path(input_path)
+    def process(self, input_path, bit_depth, sample_reduction):
+        audio = AudioSegment.from_file(input_path)
 
-        output_path = input_path.with_name(
-            f"processed_{input_path.stem}.wav"
-        )
+        # کاهش sample rate
+        new_sample_rate = audio.frame_rate // sample_reduction
+        audio = audio.set_frame_rate(new_sample_rate)
 
-        base_rate = 44100
-        target_rate = max(4000, int(base_rate / sample_reduction))
-        bits = max(4, min(bit_depth, 8))
+        # تنظیم bit depth
+        # bit_depth = 8, 16 → sample_width = bit_depth // 8
+        sample_width = bit_depth // 8
+        if sample_width < 1:
+            sample_width = 1
 
-        af_filter = (
-            f"lowpass=f=3800,"
-            f"aresample={target_rate}:resampler=soxr,"
-            f"acrusher=bits={bits}:mode=log:dither=1"
-        )
+        audio = audio.set_sample_width(sample_width)
 
-        cmd = [
-            "ffmpeg",
-            "-y",
-            "-nostdin",
-            "-loglevel", "error",
-            "-i", str(input_path),
-            "-af", af_filter,
-            str(output_path)
-        ]
-
-        def run_ffmpeg():
-            subprocess.run(
-                cmd,
-                check=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE
-            )
-
-        # ✅ run ffmpeg OUTSIDE event loop
-        await asyncio.to_thread(run_ffmpeg)
+        output_path = input_path.replace("input", "output")
+        audio.export(output_path, format="wav")
 
         return output_path
