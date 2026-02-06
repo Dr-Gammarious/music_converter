@@ -4,37 +4,42 @@ from pathlib import Path
 
 class AudioProcessor:
     def process(self, input_path, bit_depth, sample_reduction):
-        """
-        bit_depth: 1-16  (عملاً 4-8 بهترین نتیجه arcade می‌دهد)
-        sample_reduction: 1-16
-        """
-
         input_path = Path(input_path)
+
         output_path = input_path.with_name(
             f"processed_{input_path.stem}.wav"
         )
 
-        # Base sample rate
         base_rate = 44100
         target_rate = max(4000, int(base_rate / sample_reduction))
-
-        # Clamp bit depth to useful arcade range
         bits = max(4, min(bit_depth, 8))
 
         af_filter = (
             f"lowpass=f=3800,"
             f"aresample={target_rate}:resampler=soxr,"
-            f"acrusher=bits={bits}:mode=log,dither"
+            f"acrusher=bits={bits}:mode=log:dither=1"
         )
 
         cmd = [
             "ffmpeg",
-            "-y",
+            "-y",                 # ✅ overwrite without asking
+            "-loglevel", "error", # ✅ no verbose output
+            "-nostdin",           # ✅ do NOT wait for stdin
             "-i", str(input_path),
             "-af", af_filter,
             str(output_path)
         ]
 
-        subprocess.run(cmd, check=True)
+        try:
+            subprocess.run(
+                cmd,
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE  # capture error safely
+            )
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(
+                f"ffmpeg failed: {e.stderr.decode(errors='ignore')}"
+            )
 
         return output_path
