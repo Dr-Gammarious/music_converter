@@ -1,9 +1,10 @@
+import asyncio
 import subprocess
 from pathlib import Path
 
 
 class AudioProcessor:
-    def process(self, input_path, bit_depth, sample_reduction):
+    async def process(self, input_path, bit_depth, sample_reduction):
         input_path = Path(input_path)
 
         output_path = input_path.with_name(
@@ -22,24 +23,23 @@ class AudioProcessor:
 
         cmd = [
             "ffmpeg",
-            "-y",                 # ✅ overwrite without asking
-            "-loglevel", "error", # ✅ no verbose output
-            "-nostdin",           # ✅ do NOT wait for stdin
+            "-y",
+            "-nostdin",
+            "-loglevel", "error",
             "-i", str(input_path),
             "-af", af_filter,
             str(output_path)
         ]
 
-        try:
+        def run_ffmpeg():
             subprocess.run(
                 cmd,
                 check=True,
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE  # capture error safely
+                stderr=subprocess.PIPE
             )
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(
-                f"ffmpeg failed: {e.stderr.decode(errors='ignore')}"
-            )
+
+        # ✅ run ffmpeg OUTSIDE event loop
+        await asyncio.to_thread(run_ffmpeg)
 
         return output_path
